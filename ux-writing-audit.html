@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UX Writing 审计工具</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f13; --surface: #1a1a22; --surface2: #24242f; --surface3: #2e2e3d;
+  --border: #35354a; --border-light: #44445a;
+  --text: #e8e8f0; --text-muted: #7878a0; --text-subtle: #555570;
+  --accent: #7b61ff; --accent-light: #9d85ff; --accent-dim: rgba(123,97,255,0.15);
+  --yellow: #f5c518; --yellow-dim: rgba(245,197,24,0.12);
+  --orange: #ff8c42; --orange-dim: rgba(255,140,66,0.12);
+  --green: #4caf82; --green-dim: rgba(76,175,130,0.12);
+  --blue: #64a0ff; --blue-dim: rgba(100,160,255,0.12);
+  --red: #e05252;
+  --radius: 10px; --radius-sm: 6px; --radius-xs: 4px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+body { font-family: -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; font-size:13px; background:var(--bg); color:var(--text); line-height:1.5; min-height:100vh; }
+.app { display:flex; height:100vh; overflow:hidden; }
+/* sidebar */
+.sidebar { width:320px; min-width:280px; max-width:360px; display:flex; flex-direction:column; background:var(--surface); border-right:1px solid var(--border); flex-shrink:0; overflow:hidden; }
+.sidebar-header { padding:20px 20px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.logo { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+.logo-icon { width:32px; height:32px; border-radius:8px; background:var(--accent-dim); border:1px solid var(--accent); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.logo h1 { font-size:15px; font-weight:700; }
+.logo-sub { font-size:11px; color:var(--text-muted); margin-left:42px; }
+.sidebar-section { padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.section-title { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-subtle); margin-bottom:10px; }
+.field { margin-bottom:8px; }
+.field:last-child { margin-bottom:0; }
+.field label { display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; font-weight:500; }
+.field select, .field input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); padding:7px 10px; font-size:12px; outline:none; transition:border-color .15s; font-family:inherit; }
+.field select:focus, .field input:focus { border-color:var(--accent); }
+/* upload */
+.upload-zone { margin:12px 20px 0; border:2px dashed var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:all .2s; background:var(--surface2); flex-shrink:0; }
+.upload-zone:hover, .upload-zone.drag-over { border-color:var(--accent); background:var(--accent-dim); }
+.upload-zone .uz-icon { font-size:24px; margin-bottom:6px; opacity:0.6; }
+.upload-zone .uz-text { font-size:12px; color:var(--text-muted); }
+.upload-zone .uz-hint { font-size:10px; color:var(--text-subtle); margin-top:3px; }
+.upload-zone input[type="file"] { margin-top:10px; font-size:11px; color:var(--text-muted); width:100%; cursor:pointer; }
+/* image list */
+.img-list { flex:1; overflow-y:auto; padding:8px 20px 0; min-height:0; }
+.img-list-empty { font-size:11px; color:var(--text-subtle); text-align:center; padding:12px 0; }
+.img-item {
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:6px 8px; margin-bottom:6px;
+  cursor:grab; transition:border-color .15s;
+}
+.img-item:hover { border-color:var(--border-light); }
+.img-item.dragging { opacity:0.4; cursor:grabbing; }
+.img-item.drag-over { border-color:var(--accent); background:var(--accent-dim); }
+.img-thumb { width:40px; height:30px; object-fit:cover; border-radius:3px; flex-shrink:0; }
+.img-idx { font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-dim); padding:1px 5px; border-radius:3px; flex-shrink:0; }
+.img-name-input { flex:1; background:transparent; border:none; border-bottom:1px solid transparent; color:var(--text); font-size:11px; padding:1px 2px; outline:none; min-width:0; font-family:inherit; }
+.img-name-input:focus { border-bottom-color:var(--accent); }
+.img-name-input::placeholder { color:var(--text-subtle); }
+.btn-del { background:none; border:none; color:var(--text-subtle); cursor:pointer; font-size:16px; padding:0 2px; line-height:1; flex-shrink:0; }
+.btn-del:hover { color:var(--red); }
+/* bottom bar */
+.sidebar-bottom { padding:12px 20px 14px; flex-shrink:0; border-top:1px solid var(--border); }
+.btn-analyze { width:100%; padding:11px; border-radius:var(--radius); border:none; background:var(--accent); color:#fff; font-size:13px; font-weight:700; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:8px; font-family:inherit; }
+.btn-analyze:hover:not(:disabled) { background:var(--accent-light); transform:translateY(-1px); }
+.btn-analyze:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+.status-bar { font-size:11px; color:var(--text-muted); min-height:16px; margin-top:8px; }
+.status-bar.error { color:var(--red); }
+.status-bar.success { color:var(--green); }
+/* main */
+.main { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+.main-header { padding:24px 32px 20px; border-bottom:1px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; }
+.main-title { font-size:18px; font-weight:700; }
+.main-sub { font-size:12px; color:var(--text-muted); margin-top:3px; }
+.summary-badges { display:flex; gap:8px; flex-wrap:wrap; }
+.summary-badge { padding:5px 12px; border-radius:20px; font-size:12px; font-weight:600; }
+.badge-p { background:var(--yellow-dim); color:var(--yellow); }
+.badge-c { background:var(--orange-dim); color:var(--orange); }
+.badge-x { background:var(--blue-dim); color:var(--blue); }
+.results-area { flex:1; padding:24px 32px; }
+/* empty */
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; min-height:400px; color:var(--text-muted); text-align:center; }
+.empty-state .big-icon { font-size:56px; margin-bottom:16px; opacity:0.4; }
+.empty-state h2 { font-size:16px; color:var(--text); margin-bottom:8px; }
+.empty-state p { font-size:12px; max-width:300px; line-height:1.7; }
+/* section */
+.section-header { display:flex; align-items:center; gap:8px; padding:12px 0 8px; font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border); margin-bottom:12px; }
+.section-header .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.section-header .count { margin-left:auto; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700; color:var(--text); }
+.dot-placeholder { background:var(--yellow); }
+.dot-clarity { background:var(--orange); }
+.dot-cross { background:var(--blue); }
+/* cards */
+.issue-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; overflow:hidden; transition:border-color .15s,box-shadow .15s; }
+.issue-card:hover { border-color:var(--border-light); box-shadow:var(--shadow); }
+.issue-card.ignored { opacity:0.3; }
+.card-header { display:flex; align-items:flex-start; gap:10px; padding:12px 14px 10px; cursor:pointer; user-select:none; }
+.card-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:var(--radius-xs); flex-shrink:0; margin-top:1px; letter-spacing:0.3px; }
+.badge-placeholder { background:var(--yellow-dim); color:var(--yellow); border:1px solid rgba(245,197,24,0.25); }
+.badge-clarity { background:var(--orange-dim); color:var(--orange); border:1px solid rgba(255,140,66,0.25); }
+.badge-cross { background:var(--blue-dim); color:var(--blue); border:1px solid rgba(100,160,255,0.25); }
+.card-text { flex:1; min-width:0; }
+.card-original { font-size:13px; font-weight:600; color:var(--text); word-break:break-all; line-height:1.4; }
+.card-meta { font-size:11px; color:var(--text-muted); margin-top:4px; line-height:1.4; }
+.card-location { color:var(--text-subtle); }
+.card-chevron { font-size:10px; color:var(--text-subtle); margin-top:3px; transition:transform .2s; flex-shrink:0; }
+.card-chevron.open { transform:rotate(180deg); }
+.card-body { display:none; padding:0 14px 12px; border-top:1px solid var(--border); }
+.card-body.open { display:block; }
+.suggestions-label { font-size:10px; color:var(--text-subtle); text-transform:uppercase; letter-spacing:.8px; padding:10px 0 8px; font-weight:700; }
+.suggestion-item { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:var(--surface2); border-radius:var(--radius-sm); border:1px solid var(--border); }
+.suggestion-tag { font-size:10px; font-weight:700; color:var(--accent-light); padding:2px 6px; background:var(--accent-dim); border-radius:var(--radius-xs); flex-shrink:0; margin-top:1px; }
+.suggestion-text { font-size:12px; color:var(--text); flex:1; line-height:1.5; }
+.btn-copy { font-size:10px; padding:3px 8px; border-radius:var(--radius-xs); border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; flex-shrink:0; margin-top:1px; transition:all .15s; font-family:inherit; }
+.btn-copy:hover { background:var(--surface3); color:var(--text); }
+.btn-copy.copied { color:var(--green); border-color:var(--green); }
+.btn-shuffle { font-size:10px; padding:3px 8px; border-radius:var(--radius-xs); border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; flex-shrink:0; margin-top:1px; transition:all .15s; font-family:inherit; }
+.btn-shuffle:hover { background:var(--surface3); color:var(--accent-light); border-color:var(--accent); }
+.card-actions { display:flex; gap:6px; padding-top:10px; border-top:1px solid var(--border); margin-top:4px; }
+.btn-action { flex:1; padding:6px; border-radius:var(--radius-sm); border:1px solid var(--border); background:transparent; font-size:11px; cursor:pointer; transition:all .15s; font-family:inherit; color:var(--text-muted); }
+.btn-action:hover { background:var(--surface2); color:var(--text); }
+.btn-ignore:hover { color:var(--red); border-color:var(--red); }
+/* loading */
+.loading-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
+.loading-overlay.active { display:flex; }
+.loading-spinner { width:48px; height:48px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+.loading-text { color:var(--text); font-size:14px; font-weight:600; }
+.loading-sub { color:var(--text-muted); font-size:12px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+/* step indicator */
+.btn-analyze-secondary { background:var(--surface3); border:1px solid var(--accent); color:var(--accent-light); margin-top:6px; }
+.btn-analyze-secondary:hover:not(:disabled) { background:var(--accent-dim); }
+.step-indicator { display:flex; align-items:center; margin-bottom:12px; position:relative; }
+.step-dot { width:22px; height:22px; border-radius:50%; background:var(--surface3); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:var(--text-subtle); flex-shrink:0; transition:all .2s; }
+.step-dot.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent-light); }
+.step-dot.done { background:var(--green-dim); border-color:var(--green); color:var(--green); }
+.step-line { flex:1; height:1px; background:var(--border); }
+.step-labels { position:absolute; top:26px; left:0; right:0; display:flex; justify-content:space-between; font-size:9px; color:var(--text-subtle); padding:0 4px; }
+/* ── 标注预览图 ── */
+.annotated-img-wrap { position:relative; margin-bottom:12px; border-radius:var(--radius-sm); overflow:hidden; border:1px solid var(--border); }
+.annotated-img-wrap canvas { display:block; width:100%; height:auto; }
+.annotation-screen { margin-bottom:28px; }
+.annotation-screen-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.screen-idx { font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-dim); padding:2px 7px; border-radius:3px; }
+.annotation-hint { font-size:11px; color:var(--text-subtle); margin-bottom:10px; }
+.entry-list { display:flex; flex-direction:column; gap:6px; }
+.entry-item { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; transition:all .15s; }
+.entry-item:hover { border-color:var(--border-light); }
+.entry-item.selected { border-color:var(--accent); background:var(--accent-dim); }
+.entry-check { width:16px; height:16px; border-radius:4px; border:1px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; transition:all .15s; }
+.entry-item.selected .entry-check { background:var(--accent); border-color:var(--accent); color:#fff; }
+.entry-text { font-size:12px; color:var(--text); flex:1; }
+.entry-type { font-size:10px; color:var(--text-subtle); background:var(--surface2); padding:1px 5px; border-radius:3px; }
+.entry-arrow { font-size:11px; color:var(--accent-light); font-weight:600; display:none; align-items:center; gap:4px; }
+.entry-item.selected .entry-arrow { display:flex; }
+/* ── 文案替换清单样式 ── */
+.replace-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); margin-bottom:8px; overflow:hidden;
+  transition:border-color .15s, box-shadow .15s;
+}
+.replace-card:hover { border-color:var(--border-light); box-shadow:var(--shadow); }
+.replace-card.ignored { opacity:0.3; }
+.replace-header { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; }
+.replace-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:var(--radius-xs); flex-shrink:0; margin-top:1px; letter-spacing:0.3px; }
+.badge-placeholder { background:var(--yellow-dim); color:var(--yellow); border:1px solid rgba(245,197,24,0.25); }
+.badge-clarity { background:var(--orange-dim); color:var(--orange); border:1px solid rgba(255,140,66,0.25); }
+.replace-content { flex:1; min-width:0; }
+.replace-row { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
+.replace-row:last-child { margin-bottom:0; }
+.replace-label { font-size:10px; color:var(--text-subtle); width:28px; flex-shrink:0; font-weight:600; }
+.replace-original { font-size:12px; color:var(--text-muted); text-decoration:line-through; word-break:break-all; }
+.replace-arrow-icon { font-size:11px; color:var(--accent); flex-shrink:0; }
+.replace-generated { font-size:13px; font-weight:700; color:var(--text); word-break:break-all; flex:1; }
+.replace-meta { font-size:11px; color:var(--text-subtle); margin-top:4px; line-height:1.5; }
+.replace-screen { color:var(--accent-light); font-size:10px; font-weight:600; background:var(--accent-dim); padding:1px 5px; border-radius:3px; margin-right:6px; }
+.replace-num { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:var(--accent); color:#fff; font-size:10px; font-weight:700; flex-shrink:0; margin-top:1px; }
+.replace-actions { display:flex; gap:6px; padding:0 14px 12px; }
+.btn-copy-generated { font-size:11px; padding:5px 14px; border-radius:var(--radius-sm); border:1px solid var(--accent); background:var(--accent-dim); color:var(--accent-light); cursor:pointer; font-family:inherit; transition:all .15s; font-weight:600; }
+.btn-copy-generated:hover { background:var(--accent); color:#fff; }
+.btn-copy-generated.copied { color:var(--green); border-color:var(--green); background:var(--green-dim); }
+.btn-ignore-small { font-size:11px; padding:5px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:transparent; color:var(--text-subtle); cursor:pointer; font-family:inherit; transition:all .15s; }
+.btn-ignore-small:hover { color:var(--red); border-color:var(--red); }
+.entry-target-select { font-size:10px; background:var(--surface); border:1px solid var(--accent); border-radius:3px; color:var(--accent-light); padding:1px 4px; outline:none; cursor:pointer; max-width:100px; font-family:inherit; }
+.manual-add-row { display:flex; gap:6px; margin-top:8px; }
+.manual-input { flex:1; background:var(--surface2); border:1px dashed var(--border); border-radius:var(--radius-sm); color:var(--text); padding:6px 10px; font-size:11px; outline:none; font-family:inherit; }
+.manual-input:focus { border-color:var(--accent); border-style:solid; }
+.manual-input::placeholder { color:var(--text-subtle); }
+.btn-manual-add { padding:6px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface3); color:var(--text-muted); font-size:11px; cursor:pointer; font-family:inherit; transition:all .15s; white-space:nowrap; }
+.btn-manual-add:hover { border-color:var(--accent); color:var(--accent-light); }
+/* flow graph */
+.flow-graph { padding:20px 32px; }
+.flow-graph-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:16px; }
+.flow-nodes { display:flex; flex-direction:column; gap:12px; }
+/* ── 结果分屏布局：左图右清单 ── */
+.result-screen { margin-bottom:32px; }
+.result-screen-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.result-split { display:flex; gap:20px; align-items:flex-start; }
+.result-left { flex:0 0 48%; max-width:48%; position:sticky; top:24px; }
+.result-left canvas { display:block; width:100%; height:auto; border-radius:var(--radius-sm); border:1px solid var(--border); }
+.result-right { flex:1; min-width:0; }
+.result-right .replace-card { margin-bottom:8px; }
+.result-right .replace-card.highlight { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow); }
+@media (max-width: 1100px) {
+  .result-split { flex-direction:column; }
+  .result-left { flex:none; max-width:100%; position:static; }
+}
+::-webkit-scrollbar { width:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:10px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">🔍</div>
+        <h1>UX Writing 审计</h1>
+      </div>
+      <div class="logo-sub">AI 驱动 · 单界面 &amp; 跨界面文案检测</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-title">分析配置</div>
+      <div class="field">
+        <label>活动风格</label>
+        <select id="style-select">
+          <option value="暗黑奇幻·万圣节">暗黑奇幻 · 万圣节</option>
+          <option value="Q萌·卡通">Q萌 · 卡通</option>
+          <option value="科幻·硬核">科幻 · 硬核</option>
+          <option value="史诗·奇幻RPG">史诗 · 奇幻 RPG</option>
+          <option value="写实·现代">写实 · 现代</option>
+          <option value="通用" selected>通用（不限风格）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>模型</label>
+        <select id="model-select">
+          <option value="netease-codemaker/claude-sonnet-4-5-20250929">claude-sonnet-4-5（推荐）</option>
+          <option value="netease-codemaker/claude-opus-4-5-20251101">claude-opus-4-5（强力）</option>
+          <option value="netease-codemaker/claude-sonnet-4-6">claude-sonnet-4-6</option>
+          <option value="netease-codemaker/claude-opus-4-6">claude-opus-4-6（最强）</option>
+          <option value="netease-codemaker/gemini-3.1-pro">gemini-3.1-pro</option>
+          <option value="netease-codemaker/gpt-5.2-2025-12-11">gpt-5.2</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 上传区域 -->
+    <div class="upload-zone" id="upload-zone">
+      <div class="uz-icon">🖼️</div>
+      <div class="uz-text">点击 / 拖拽 / Ctrl+V 添加截图</div>
+      <div class="uz-hint">支持多张，上传顺序即为跳转流程</div>
+      <input type="file" id="file-input" accept="image/*" multiple />
+    </div>
+
+    <!-- 图片列表 -->
+    <div class="img-list" id="img-list">
+      <div class="img-list-empty" id="img-list-empty">暂无截图，请上传</div>
+    </div>
+
+    <!-- 底部按钮：两步流程 -->
+    <div class="sidebar-bottom">
+      <!-- 步骤指示 -->
+      <div class="step-indicator" id="step-indicator">
+        <div class="step-dot active" id="sdot-1">1</div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="sdot-2">2</div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="sdot-3">3</div>
+        <div class="step-labels">
+          <span>上传</span><span>标注(可跳过)</span><span>分析</span>
+        </div>
+      </div>
+      <button class="btn-analyze" id="btn-extract" disabled>
+        <span>🔎</span><span id="btn-extract-text">识别交互文案</span>
+      </button>
+      <button class="btn-analyze btn-analyze-secondary" id="btn-skip" disabled style="display:flex">
+        <span>⚡</span><span>跳过标注，直接分析</span>
+      </button>
+      <button class="btn-analyze btn-analyze-secondary" id="btn-analyze" disabled style="display:none">
+        <span>🔍</span><span id="btn-text">开始分析</span>
+      </button>
+      <div class="status-bar" id="status-bar"></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <div class="main-title" id="main-title">分析结果</div>
+        <div class="main-sub" id="main-sub">上传截图后点击分析</div>
+      </div>
+      <div class="summary-badges" id="summary-badges" style="display:none"></div>
+    </div>
+    <div class="results-area" id="results">
+      <div class="empty-state">
+        <div class="big-icon">🔍</div>
+        <h2>准备开始审计</h2>
+        <p>上传一张或多张游戏界面截图，AI 会识别单界面文案问题，以及跨界面的文案不一致</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">AI 分析中...</div>
+  <div class="loading-sub" id="loading-sub">请稍候</div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+// images: [{id, base64, name, thumb}]
+let images = [];
+let currentIssues = [];
+let ignoredSet = new Set();
+let dragSrcIdx = null;
+
+function getModel() { return document.getElementById('model-select').value; }
+function getStyle() { return document.getElementById('style-select').value; }
+
+// ── Image compression ──────────────────────────────────────────────────────
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else       { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve({
+          id: Date.now() + '_' + Math.random().toString(36).slice(2),
+          base64: dataUrl.replace(/^data:image\/[^;]+;base64,/, ''),
+          name: file.name.replace(/\.[^.]+$/, ''),
+          thumb: dataUrl,
+        });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Add images ─────────────────────────────────────────────────────────────
+async function addFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const item = await compressImage(file);
+    images.push(item);
+  }
+  renderImageList();
+  updateAnalyzeBtn();
+}
+
+// ── Image list UI ───────────────────────────────────────────────────────────
+function renderImageList() {
+  const container = document.getElementById('img-list');
+  const empty = document.getElementById('img-list-empty');
+  if (!images.length) { empty.style.display = 'block'; container.querySelectorAll('.img-item').forEach(el => el.remove()); return; }
+  empty.style.display = 'none';
+
+  // 清空再重建
+  container.querySelectorAll('.img-item').forEach(el => el.remove());
+  images.forEach((img, idx) => {
+    const div = document.createElement('div');
+    div.className = 'img-item';
+    div.draggable = true;
+    div.dataset.idx = idx;
+    div.innerHTML = `
+      <span class="img-idx">${idx + 1}</span>
+      <img class="img-thumb" src="${img.thumb}" />
+      <input class="img-name-input" type="text" value="${esc(img.name)}" placeholder="界面名称（可选）" data-id="${img.id}" />
+      <button class="btn-del" data-id="${img.id}" title="删除">×</button>`;
+
+    // 拖拽排序
+    div.addEventListener('dragstart', e => {
+      dragSrcIdx = idx;
+      div.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    div.addEventListener('dragend', () => {
+      div.classList.remove('dragging');
+      document.querySelectorAll('.img-item').forEach(el => el.classList.remove('drag-over'));
+    });
+    div.addEventListener('dragover', e => {
+      e.preventDefault();
+      document.querySelectorAll('.img-item').forEach(el => el.classList.remove('drag-over'));
+      div.classList.add('drag-over');
+    });
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      div.classList.remove('drag-over');
+      if (dragSrcIdx === null || dragSrcIdx === idx) return;
+      const moved = images.splice(dragSrcIdx, 1)[0];
+      images.splice(idx, 0, moved);
+      dragSrcIdx = null;
+      renderImageList();
+    });
+
+    // 名称编辑
+    div.querySelector('.img-name-input').addEventListener('change', e => {
+      const item = images.find(i => i.id === e.target.dataset.id);
+      if (item) item.name = e.target.value;
+    });
+
+    // 删除
+    div.querySelector('.btn-del').addEventListener('click', e => {
+      const id = e.target.dataset.id;
+      images = images.filter(i => i.id !== id);
+      renderImageList();
+      updateAnalyzeBtn();
+    });
+
+    container.appendChild(div);
+  });
+}
+
+function updateAnalyzeBtn() {
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = images.length === 0;
+}
+
+// ── Upload events ──────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+
+fileInput.addEventListener('change', e => { addFiles(Array.from(e.target.files)); fileInput.value = ''; });
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', e => { if (!uploadZone.contains(e.relatedTarget)) uploadZone.classList.remove('drag-over'); });
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  addFiles(Array.from(e.dataTransfer.files));
+});
+document.addEventListener('paste', e => {
+  const items = Array.from(e.clipboardData?.items || []).filter(i => i.type.startsWith('image/'));
+  if (items.length) addFiles(items.map(i => i.getAsFile()));
+});
+
+// ── Prompt builder ─────────────────────────────────────────────────────────
+
+// 单图分析 Prompt（逐图调用时用）
+function buildSingleImagePrompt(style, imgName, contextHint, extractedTexts) {
+  const textListHint = extractedTexts && extractedTexts.length
+    ? `\n\n以下是图中识别到的全部文字（供参考，请以图片实际内容为准）：\n${extractedTexts.map((t, i) => `${i+1}. "${t.text}"（${t.type || ''}，位置：左${Math.round(t.x*100)}% 上${Math.round(t.y*100)}%）`).join('\n')}`
+    : '';
+
+  return `这是一张游戏活动界面截图（风格：${style}${imgName ? '，界面名：' + imgName : ''}）。${contextHint || ''}${textListHint}
+
+请完成以下任务：
+
+【第一步：理解界面意图】
+根据界面中已有的符合风格的文案、视觉元素、布局结构，推断这个界面的核心功能和活动背景。
+
+【第二步：逐一审查所有文案】
+对图中每一处文字（参考上方文字清单），判断属于以下哪种情况：
+
+A. 占位文案（需生成）—— 这类文案是设计稿中的临时填充，不是真实内容：
+- 重复词语堆叠（如"活动名称名称名称"、"标题标题标题"）
+- 全9数字（99,999,999）或明显无意义的数字
+- 通用无语义标签（"按钮文本"、"页签文本"、"标题文字"、"TBD"、"xxx"等）
+- 设计注释混入UI（"中文不超过两行"、"此处填写内容"等）
+- 截断省略号结尾的未完成文案（"用黑话与黑市商人议价以规..."）
+→ 根据界面意图、活动主题和风格，生成符合氛围的真实成品文案替换它
+
+B. 表意不清文案（需改写）—— 这类是真实文案但表达有问题：
+- 按钮文案模糊，点击后行为不明确（如孤立的"确认"、"前往"、"更多"等）
+- 同屏数值矛盾或信息冲突
+- 无引导的错误提示或空状态文案
+- 功能描述过于笼统，用户无法理解具体含义
+→ 改写为表意清晰的版本，保持同样的风格调性
+
+C. 合适文案（保留）：符合活动风格且表意清晰 → 不返回
+
+⚠️ 重要：A 类是假文案/占位符，B 类是真实但表达有问题的文案。请仔细区分，两类都要检查，不要遗漏。
+
+返回 JSON 数组，只包含 A 类和 B 类，C 类不返回：
+[
+  {
+    "type": "placeholder",
+    "original": "原始占位文案（与图中文字完全一致）",
+    "location": "界面中的位置描述",
+    "generated": "生成的替换文案（直接可用的成品）",
+    "reason": "一句话说明为何是占位/如何生成"
+  }
+]
+
+重要原则：
+- original 必须与图中实际文字完全一致（包括省略号、标点）
+- generated 是可直接粘贴使用的完整成品文案，不是描述性说明
+- 保留原有字数限制
+- type 只能是 "placeholder" 或 "clarity"
+- 只返回 JSON，不要其他文字`;
+}
+
+// ── JSON parser ────────────────────────────────────────────────────────────
+function parseLooseJSON(raw) {
+  try { return JSON.parse(raw); } catch (_) {}
+  let s = raw.replace(/```(?:json)?/gi,'').trim();
+  s = s.replace(/,\s*([\]}])/g,'$1');
+  s = s.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, m => m.replace(/(?<!\\)\n/g,'\\n').replace(/(?<!\\)\r/g,'\\r'));
+  try { return JSON.parse(s); } catch (_) {}
+  try {
+    let fixed='', inStr=false, i=0;
+    while(i<s.length){
+      const ch=s[i];
+      if(ch==='\\'&&inStr){fixed+=ch+(s[i+1]||'');i+=2;continue;}
+      if(ch==='"'){
+        if(!inStr){inStr=true;fixed+=ch;}
+        else{
+          let j=i+1; while(j<s.length&&' \t\r\n'.includes(s[j]))j++;
+          if(',:]}\n'.includes(s[j]||'')||j>=s.length){inStr=false;fixed+=ch;}
+          else fixed+='\\"';
+        }
+      } else fixed+=ch;
+      i++;
+    }
+    return JSON.parse(fixed);
+  } catch(e){ throw new Error('JSON 解析失败: '+e.message); }
+}
+
+// ── 逐图分析公共函数 ──────────────────────────────────────────────────────
+// 每张图：先 extract 拿精确坐标 → 再 analyze 拿替换文案 → 用原文匹配关联坐标
+async function analyzePerImage(style, model, contextHint) {
+  const allIssues = [];
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
+
+    // Step A: 调 /extract 获取精确坐标
+    setLoadingSub(`识别第 ${i + 1}/${images.length} 张界面文字位置${img.name ? '（' + img.name + '）' : ''}...`);
+    let textsWithCoords = [];
+    try {
+      const er = await fetch('http://127.0.0.1:7788/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: [{ base64: img.base64, name: img.name }], model }),
+      });
+      if (er.ok) {
+        const ed = await er.json();
+        if (ed.results?.[0]?.texts) textsWithCoords = ed.results[0].texts;
+        console.log(`[extract] 界面${i+1} 识别到 ${textsWithCoords.length} 个文字:`, textsWithCoords.map(t => `"${t.text}" x=${t.x} y=${t.y} w=${t.w} h=${t.h}`));
+      }
+    } catch(_) {} // extract 失败不阻断流程
+
+    // Step B: 调 /analyze 获取替换文案（把 extract 识别的文字列表一并传入）
+    setLoadingSub(`分析第 ${i + 1}/${images.length} 张界面文案${img.name ? '（' + img.name + '）' : ''}...`);
+    const prompt = buildSingleImagePrompt(style, img.name, contextHint, textsWithCoords);
+    const r = await fetch('http://127.0.0.1:7788/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: [{ base64: img.base64, name: img.name }], prompt, model }),
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error(`界面${i+1}分析失败: ` + t.substring(0, 200)); }
+    const data = await r.json();
+    if (data.error) throw new Error(`界面${i+1}: ` + data.error);
+    const raw = data.text || '';
+
+    const cleaned = raw.replace(/```(?:json)?/gi, '').trim();
+    const match = cleaned.match(/\[[\s\S]*\]/) || raw.match(/\[[\s\S]*\]/);
+    if (match) {
+      const issues = parseLooseJSON(match[0]);
+      // Step C: 用原文匹配关联 extract 的精确坐标
+      const usedCoordIds = new Set(); // 避免重复文本匹配到同一个坐标
+      const normalize = s => (s||'').replace(/[\s>＞→·\.…,，、。！!？?：:；;""''\"\']/g, '').trim();
+
+      issues.forEach(iss => {
+        iss.screenIndex = i + 1;
+        if (!textsWithCoords.length) return;
+
+        const orig = (iss.original || '').trim();
+        const origNorm = normalize(orig);
+
+        // 在未使用的坐标中查找：精确 → 归一化精确 → 包含 → 归一化包含 → 前缀
+        const candidates = textsWithCoords.filter((_, ci) => !usedCoordIds.has(ci));
+        const found =
+          candidates.find(t => t.text === orig) ||
+          candidates.find(t => normalize(t.text) === origNorm) ||
+          candidates.find(t => t.text && orig && (t.text.includes(orig) || orig.includes(t.text))) ||
+          candidates.find(t => { const tn = normalize(t.text); return tn && origNorm && (tn.includes(origNorm) || origNorm.includes(tn)); }) ||
+          candidates.find(t => t.text && orig && orig.length >= 3 && t.text.includes(orig.slice(0, Math.min(6, orig.length))));
+
+        if (found && typeof found.x === 'number') {
+          const ci = textsWithCoords.indexOf(found);
+          usedCoordIds.add(ci);
+          iss.x = found.x;
+          iss.y = found.y;
+          iss.w = found.w;
+          iss.h = found.h;
+          console.log(`[match] "${orig}" → 匹配到 "${found.text}" at (${found.x}, ${found.y}) [idx=${ci}]`);
+        } else {
+          console.log(`[match] "${orig}" → 未匹配到坐标`);
+        }
+      });
+      allIssues.push(...issues);
+    }
+  }
+  return allIssues;
+}
+
+// ── Main analyze（走过识别+标注流程后的分析）──────────────────────────────
+async function analyze() {
+  if (!images.length) { setStatus('请先上传截图', 'error'); return; }
+  const style = getStyle();
+  const model = getModel();
+
+  // 构建跳转上下文作为 hint
+  let contextHint = '';
+  if (images.length > 1 && extractedData.length) {
+    const edges = [];
+    extractedData.forEach((screen, si) => {
+      const screenName = screen.screenName || `界面${si+1}`;
+      screen.texts.forEach(item => {
+        if (!screen.selected.has(item.id)) return;
+        const targetIdx = screen.targets?.[item.id] ?? -1;
+        const targetName = targetIdx >= 0
+          ? (extractedData[targetIdx]?.screenName || `界面${targetIdx+1}`)
+          : '（目标未指定）';
+        edges.push(`${screenName}的【${item.text}】→ ${targetName}`);
+      });
+    });
+    if (edges.length) {
+      contextHint = '\n该界面属于一个多界面活动流程，跳转关系：' + edges.join('；');
+    }
+  }
+
+  setBtnState(true);
+  showLoading(true);
+  setStatus('');
+  setStep(3);
+
+  try {
+    const issues = await analyzePerImage(style, model, contextHint);
+    currentIssues = issues;
+    console.log('[renderResults] AI 返回数据:', JSON.stringify(issues, null, 2));
+    renderResults(issues, style, images.length);
+    const total = issues.length;
+    setStatus(total ? `✓ 发现 ${total} 个问题` : '✓ 未发现问题，文案质量良好', total ? '' : 'success');
+    setStep(3);
+  } catch(e) {
+    setStatus('分析失败：' + e.message, 'error');
+    document.getElementById('results').innerHTML = `<div class="empty-state"><div class="big-icon">⚠️</div><h2>分析失败</h2><p style="color:var(--red)">${esc(e.message)}</p></div>`;
+    setStep(2);
+  } finally {
+    setBtnState(false);
+    showLoading(false);
+  }
+}
+
+// ── 跳过标注，直接分析 ─────────────────────────────────────────────────────
+async function analyzeDirectly() {
+  if (!images.length) { setStatus('请先上传截图', 'error'); return; }
+  const style = getStyle();
+  const model = getModel();
+
+  extractedData = [];
+  setStep(3);
+  setBtnLoading(true);
+  showLoading(true);
+  setStatus('');
+
+  try {
+    const issues = await analyzePerImage(style, model, '');
+    currentIssues = issues;
+    console.log('[renderResults] AI 返回数据:', JSON.stringify(issues, null, 2));
+    renderResults(issues, style, images.length);
+    const total = issues.length;
+    setStatus(total ? `✓ 发现 ${total} 个问题` : '✓ 未发现问题，文案质量良好', total ? '' : 'success');
+  } catch(e) {
+    setStatus('分析失败：' + e.message, 'error');
+    document.getElementById('results').innerHTML = `<div class="empty-state"><div class="big-icon">⚠️</div><h2>分析失败</h2><p style="color:var(--red)">${esc(e.message)}</p></div>`;
+    setStep(1);
+  } finally {
+    setBtnLoading(false);
+    showLoading(false);
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderResults(issues, style, screenCount) {
+  const placeholders = issues.filter(i => i.type === 'placeholder');
+  const clarities    = issues.filter(i => i.type === 'clarity');
+
+  document.getElementById('main-title').textContent = issues.length
+    ? `生成 ${issues.length} 条文案替换`
+    : '文案已完整，无需替换';
+  document.getElementById('main-sub').textContent = `${style} · ${screenCount}张界面 · 刚刚`;
+
+  const badges = document.getElementById('summary-badges');
+  if (issues.length) {
+    badges.style.display = 'flex';
+    badges.innerHTML =
+      (placeholders.length ? `<span class="summary-badge badge-p">占位替换 ${placeholders.length}</span>` : '') +
+      (clarities.length    ? `<span class="summary-badge badge-c">表意改写 ${clarities.length}</span>`    : '');
+  } else { badges.style.display = 'none'; }
+
+  const container = document.getElementById('results');
+  if (!issues.length) {
+    container.innerHTML = `<div class="empty-state"><div class="big-icon">✅</div><h2>文案已完整</h2><p>未发现占位或表意问题，界面文案可直接使用</p></div>`;
+    return;
+  }
+
+  // 按界面分组 — 用 screenIndex（纯数字 1/2/3）直接索引图片
+  console.log('[renderResults] AI 返回数据:', JSON.stringify(issues, null, 2));
+  const screenGroups = [];
+  const screenMap = new Map();
+  issues.forEach((iss, globalIdx) => {
+    // screenIndex 优先（纯数字），fallback 到 screen 字段提取数字
+    let idx = 0;
+    if (typeof iss.screenIndex === 'number') {
+      idx = iss.screenIndex - 1;
+    } else if (iss.screen) {
+      const m = String(iss.screen).match(/(\d+)/);
+      if (m) idx = parseInt(m[1]) - 1;
+    }
+    // 保护越界：单图时全归到第0张
+    if (idx < 0 || idx >= images.length) idx = 0;
+
+    if (!screenMap.has(idx)) {
+      const imgItem = images[idx];
+      const displayName = imgItem?.name || `界面${idx + 1}`;
+      const group = { name: displayName, imgIdx: idx, issues: [] };
+      screenMap.set(idx, group);
+      screenGroups.push(group);
+    }
+    screenMap.get(idx).issues.push({ ...iss, _globalIdx: globalIdx });
+  });
+  // 按界面编号排序
+  screenGroups.sort((a, b) => a.imgIdx - b.imgIdx);
+  console.log('[renderResults] 分组结果:', screenGroups.map(g => `imgIdx=${g.imgIdx} name=${g.name} count=${g.issues.length}`));
+
+  let html = '';
+  screenGroups.forEach((group, gi) => {
+    const imgItem = images[group.imgIdx];
+    const screenId = `result-screen-${gi}`;
+
+    html += `<div class="result-screen" id="${screenId}">`;
+    if (screenGroups.length > 1 || images.length > 1) {
+      html += `<div class="result-screen-title"><span class="screen-idx">${group.imgIdx + 1}</span>${esc(group.name)}</div>`;
+    }
+    html += `<div class="result-split">`;
+
+    // 左侧：标注图
+    html += `<div class="result-left"><canvas id="result-canvas-${gi}"></canvas></div>`;
+
+    // 右侧：替换清单
+    html += `<div class="result-right">`;
+    group.issues.forEach((iss, localIdx) => {
+      html += replaceCardHtml(iss, gi, localIdx);
+    });
+    html += `</div>`;
+
+    html += `</div></div>`;
+  });
+
+  container.innerHTML = html;
+  bindReplaceEvents(container);
+  applyIgnored();
+
+  // 异步渲染每个界面的标注图
+  screenGroups.forEach(async (group, gi) => {
+    const imgItem = images[group.imgIdx];
+    if (!imgItem) return;
+    const canvas = document.getElementById(`result-canvas-${gi}`);
+    if (!canvas) return;
+    const annotatedDataUrl = await drawResultAnnotation(imgItem.base64, group.issues);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+    };
+    img.src = annotatedDataUrl;
+  });
+}
+
+// ── 在原图上画序号气泡标注 ─────────────────────────────────────────────────
+function drawResultAnnotation(imgBase64, issues) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const W = img.width, H = img.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const BUBBLE_R = Math.max(16, Math.min(24, W * 0.018));
+
+      issues.forEach((item, idx) => {
+        const num = idx + 1;
+
+        // 计算气泡中心点
+        let cx, cy;
+        if (typeof item.x === 'number' && typeof item.y === 'number') {
+          // 有坐标：放在文案区域的左上角偏移处（不遮挡文字）
+          const tx = clamp(item.x, 0, 1) * W;
+          const ty = clamp(item.y, 0, 1) * H;
+          cx = tx - BUBBLE_R * 0.5;
+          cy = ty - BUBBLE_R * 0.5;
+        } else {
+          // 无坐标降级：沿左侧等距排列
+          cx = W * 0.03 + BUBBLE_R;
+          cy = H * (0.05 + idx * 0.08) + BUBBLE_R;
+        }
+        // 防止溢出画布
+        cx = clamp(cx, BUBBLE_R, W - BUBBLE_R);
+        cy = clamp(cy, BUBBLE_R, H - BUBBLE_R);
+
+        const isPlaceholder = item.type === 'placeholder';
+        const color = isPlaceholder ? '#f5c518' : '#ff8c42';
+
+        // 气泡阴影
+        ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 2;
+
+        // 气泡填充
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy, BUBBLE_R, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 重置阴影
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+
+        // 气泡描边
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 序号文字
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${Math.round(BUBBLE_R * 1.2)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(num), cx, cy + 1);
+      });
+
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    img.src = 'data:image/jpeg;base64,' + imgBase64;
+  });
+}
+
+function sectionHtml(label, type, count) {
+  return `<div class="section-header"><span class="dot dot-${type}"></span>${label}<span class="count">${count}</span></div>`;
+}
+
+function replaceCardHtml(issue, screenIdx, localIdx) {
+  const num = localIdx + 1;
+  const key = `s${screenIdx}_${localIdx}_${(issue.original||'').slice(0,10)}`;
+  const bc  = issue.type === 'placeholder' ? 'badge-placeholder' : 'badge-clarity';
+  const bl  = issue.type === 'placeholder' ? '占位' : '表意';
+  const original  = issue.original || issue.text || '';
+  const generated = issue.generated || '';
+  const location  = issue.location || '';
+  const reason    = issue.reason || issue.issue || '';
+
+  return `<div class="replace-card${ignoredSet.has(key)?' ignored':''}" data-key="${esc(key)}" data-screen="${screenIdx}" data-local="${localIdx}">
+    <div class="replace-header">
+      <span class="replace-num">${num}</span>
+      <span class="replace-badge ${bc}">${bl}</span>
+      <div class="replace-content">
+        <div class="replace-row">
+          <span class="replace-label">原文</span>
+          <span class="replace-original">${esc(original)}</span>
+        </div>
+        <div class="replace-row">
+          <span class="replace-label">替换</span>
+          <span class="replace-arrow-icon">→</span>
+          <span class="replace-generated">${esc(generated)}</span>
+        </div>
+        <div class="replace-meta">
+          ${location ? esc(location) : ''}
+          ${(location && reason) ? ' · ' : ''}
+          ${reason ? esc(reason) : ''}
+        </div>
+      </div>
+    </div>
+    <div class="replace-actions">
+      <button class="btn-copy-generated" data-text="${esc(generated)}">复制替换文案</button>
+      <button class="btn-ignore-small" data-key="${esc(key)}">${ignoredSet.has(key)?'取消忽略':'忽略'}</button>
+    </div>
+  </div>`;
+}
+
+function bindReplaceEvents(container) {
+  container.querySelectorAll('.btn-copy-generated').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(el.dataset.text).then(() => {
+        el.textContent='已复制 ✓'; el.classList.add('copied');
+        setTimeout(()=>{ el.textContent='复制替换文案'; el.classList.remove('copied'); }, 1500);
+      });
+    });
+  });
+  container.querySelectorAll('.btn-ignore-small').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const key = el.dataset.key;
+      if (ignoredSet.has(key)) ignoredSet.delete(key); else ignoredSet.add(key);
+      applyIgnored();
+    });
+  });
+  // hover 联动：高亮对应标注
+  container.querySelectorAll('.replace-card').forEach(card => {
+    card.addEventListener('mouseenter', () => {
+      container.querySelectorAll('.replace-card').forEach(c => c.classList.remove('highlight'));
+      card.classList.add('highlight');
+    });
+    card.addEventListener('mouseleave', () => {
+      card.classList.remove('highlight');
+    });
+  });
+}
+
+function applyIgnored() {
+  document.querySelectorAll('.replace-card').forEach(card => {
+    const key = card.dataset.key;
+    card.classList.toggle('ignored', ignoredSet.has(key));
+    const btn = card.querySelector('.btn-ignore-small');
+    if (btn) btn.textContent = ignoredSet.has(key) ? '取消忽略' : '忽略';
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function setStatus(msg, cls) {
+  const el = document.getElementById('status-bar');
+  el.textContent = msg; el.className = 'status-bar' + (cls?' '+cls:'');
+}
+function setBtnState(loading) {
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = loading || images.length === 0;
+  document.getElementById('btn-text').textContent = loading ? '分析中...' : '开始分析';
+}
+function showLoading(show) { document.getElementById('loading-overlay').classList.toggle('active', show); }
+function setLoadingSub(t) { document.getElementById('loading-sub').textContent = t; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 两步流程逻辑 ────────────────────────────────────────────────────────────
+
+// extractedData: [{screenIdx, screenName, texts:[{id,text,type}], selected:Set<id>}]
+let extractedData = [];
+
+// 步骤指示器
+function setStep(n) { // 1=上传, 2=标注, 3=分析
+  ['sdot-1','sdot-2','sdot-3'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
+    if (i + 1 < n) el.classList.add('done');
+    else if (i + 1 === n) el.classList.add('active');
+  });
+}
+
+// 步骤 1→2：识别交互文案
+async function extract() {
+  if (!images.length) { setStatus('请先上传截图', 'error'); return; }
+  const model = getModel();
+
+  document.getElementById('btn-extract').disabled = true;
+  document.getElementById('btn-extract-text').textContent = '识别中...';
+  showLoading(true);
+  setLoadingSub(`逐图识别交互文案（共 ${images.length} 张，每张约 15 秒）...`);
+  setStatus('');
+
+  try {
+    const r = await fetch('http://127.0.0.1:7788/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: images.map(img => ({ base64: img.base64, name: img.name })), model }),
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error('服务器错误 ' + r.status + ': ' + t.substring(0,200)); }
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    extractedData = data.results.map(r => ({ ...r, selected: new Set(), targets: {} }));
+    await renderAnnotationPanel();
+    setStep(2);
+    setStatus('识别完成，请勾选各界面的跳转触发点');
+
+    // 隐藏跳过按钮，显示分析按钮
+    document.getElementById('btn-skip').style.display = 'none';
+
+    // 单张图不需要跨界面分析，直接跳到分析
+    if (images.length === 1) {
+      showAnalyzeBtn(true);
+      setStatus('单张图无需标注跳转，可直接分析');
+    } else {
+      showAnalyzeBtn(true);
+    }
+  } catch(e) {
+    setStatus('识别失败：' + e.message, 'error');
+  } finally {
+    document.getElementById('btn-extract').disabled = false;
+    document.getElementById('btn-extract-text').textContent = '重新识别';
+    showLoading(false);
+  }
+}
+
+function showAnalyzeBtn(show) {
+  document.getElementById('btn-analyze').style.display = show ? 'flex' : 'none';
+  document.getElementById('btn-analyze').disabled = false;
+}
+
+// ── Canvas 标注：在图片上画序号圆圈 ─────────────────────────────────────────
+function drawAnnotatedImage(imgBase64, texts) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const W = img.width, H = img.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      texts.forEach((item, idx) => {
+        const num = idx + 1;
+        const x = item.x * W, y = item.y * H;
+        const w = item.w * W, h = item.h * H;
+        const cx = x + w / 2, cy = y + h / 2;
+        const r = Math.max(12, Math.min(16, Math.min(w, h) * 0.4));
+
+        // 高亮框
+        ctx.strokeStyle = 'rgba(123,97,255,0.8)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x, y, w, h);
+
+        // 序号圆圈背景
+        ctx.fillStyle = '#7b61ff';
+        ctx.beginPath();
+        ctx.arc(x + r * 0.8, y + r * 0.8, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 序号文字
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.round(r * 1.1)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(num), x + r * 0.8, y + r * 0.85);
+      });
+
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.src = 'data:image/jpeg;base64,' + imgBase64;
+  });
+}
+
+// 渲染标注面板（主区域）
+async function renderAnnotationPanel() {
+  const container = document.getElementById('results');
+  document.getElementById('main-title').textContent = '标注跳转关系';
+  document.getElementById('main-sub').textContent = '查看文案点位，勾选跳转入口并指定目标界面';
+  document.getElementById('summary-badges').style.display = 'none';
+
+  if (!extractedData.length) {
+    container.innerHTML = '<div class="empty-state"><div class="big-icon">⚠️</div><h2>未识别到内容</h2></div>';
+    return;
+  }
+
+  // 构建界面选项
+  const screenOptions = extractedData.map((s, i) =>
+    `<option value="${i}">${i+1}. ${esc(s.screenName)}</option>`
+  ).join('');
+
+  let html = '<div class="annotation-panel">';
+  extractedData.forEach((screen, si) => {
+    html += `<div class="annotation-screen" data-screen="${si}">
+      <div class="annotation-screen-title">
+        <span class="screen-idx">${si + 1}</span>
+        ${esc(screen.screenName)}
+        <span style="font-size:11px;color:var(--text-subtle);font-weight:400">勾选跳转入口并指定目标界面</span>
+      </div>
+      <div class="annotated-img-wrap" id="annotated-wrap-${si}">
+        <canvas id="annotated-canvas-${si}"></canvas>
+      </div>`;
+
+    const allTexts = screen.texts;                          // 所有文字（用于画标注图）
+    const entryTexts = allTexts.filter(t => t.interactive); // 仅可交互元素（用于跳转列表）
+
+    if (!allTexts.length) {
+      html += `<div class="annotation-hint">未识别到文字，可手动添加跳转入口</div><div class="entry-list" id="entry-list-${si}"></div>`;
+    } else {
+      html += `<div class="annotation-hint">下方仅列出可交互入口，勾选后指定跳转目标界面</div><div class="entry-list" id="entry-list-${si}">`;
+      if (!entryTexts.length) {
+        html += `<div style="font-size:11px;color:var(--text-subtle);padding:8px 0;">未识别到可交互入口，可手动添加</div>`;
+      } else {
+        entryTexts.forEach((item) => {
+          const globalIdx = allTexts.indexOf(item); // 在全量列表中的索引（对应序号）
+          const num = globalIdx + 1;
+          const sel = screen.selected.has(item.id);
+          const target = screen.targets?.[item.id] ?? -1;
+          const opts = extractedData.map((s, i) => i === si ? '' :
+            `<option value="${i}" ${target === i ? 'selected' : ''}>${i+1}. ${esc(s.screenName)}</option>`
+          ).join('');
+          const numBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;flex-shrink:0;">${num}</span>`;
+          html += `<div class="entry-item${sel?' selected':''}" data-screen="${si}" data-id="${esc(item.id)}">
+            <div class="entry-check">${sel ? '✓' : ''}</div>
+            ${numBadge}
+            <span class="entry-text">${esc(item.text)}</span>
+            <span class="entry-type">${esc(item.type||'')}</span>
+            <span class="entry-arrow">→ <select class="entry-target-select" data-screen="${si}" data-id="${esc(item.id)}">
+              <option value="-1">选择目标界面</option>
+              ${opts}
+            </select></span>
+          </div>`;
+        });
+      }
+      html += '</div>';
+    }
+
+    html += `<div class="manual-add-row" data-screen="${si}">
+      <input class="manual-input" type="text" placeholder="+ 添加未识别的入口（如"右上角×关闭"）" data-screen="${si}" />
+      <button class="btn-manual-add" data-screen="${si}">添加</button>
+    </div>`;
+    html += '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+
+  // 异步渲染每张图的标注版本
+  for (let si = 0; si < extractedData.length; si++) {
+    const screen = extractedData[si];
+    const imgItem = images[si];
+    if (!imgItem) continue;
+    const canvas = document.getElementById(`annotated-canvas-${si}`);
+    if (!canvas) continue;
+
+    const annotatedDataUrl = await drawAnnotatedImage(imgItem.base64, screen.texts);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+    };
+    img.src = annotatedDataUrl;
+  }
+
+  // 绑定勾选事件
+  container.querySelectorAll('.entry-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.tagName === 'SELECT') return;
+      const si = parseInt(el.dataset.screen);
+      const id = el.dataset.id;
+      const screen = extractedData[si];
+      if (screen.selected.has(id)) {
+        screen.selected.delete(id);
+        delete (screen.targets ||= {})[id];
+      } else {
+        screen.selected.add(id);
+      }
+      const sel = screen.selected.has(id);
+      el.classList.toggle('selected', sel);
+      el.querySelector('.entry-check').textContent = sel ? '✓' : '';
+    });
+  });
+
+  container.querySelectorAll('.entry-target-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const si = parseInt(sel.dataset.screen);
+      const id = sel.dataset.id;
+      const screen = extractedData[si];
+      const targetIdx = parseInt(sel.value);
+      if (!screen.targets) screen.targets = {};
+      screen.targets[id] = targetIdx;
+      if (targetIdx >= 0 && !screen.selected.has(id)) {
+        screen.selected.add(id);
+        const item = container.querySelector(`.entry-item[data-screen="${si}"][data-id="${id}"]`);
+        if (item) { item.classList.add('selected'); item.querySelector('.entry-check').textContent = '✓'; }
+      }
+    });
+  });
+
+  container.querySelectorAll('.btn-manual-add').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const si = parseInt(btn.dataset.screen);
+      const input = container.querySelector(`.manual-input[data-screen="${si}"]`);
+      const text = input.value.trim();
+      if (!text) return;
+      const screen = extractedData[si];
+      const newId = 'manual_' + Date.now();
+      // 手动添加的项没有坐标，放在右下角
+      screen.texts.push({ id: newId, text, type: 'manual', interactive: true, x: 0.7, y: 0.85, w: 0.25, h: 0.08 });
+      screen.selected.add(newId);
+      input.value = '';
+      renderAnnotationPanel();
+    });
+  });
+
+  container.querySelectorAll('.manual-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        container.querySelector(`.btn-manual-add[data-screen="${input.dataset.screen}"]`).click();
+      }
+    });
+  });
+}
+
+
+function setBtnLoading(loading) {
+  document.getElementById('btn-extract').disabled = loading;
+  document.getElementById('btn-skip').disabled = loading;
+  document.getElementById('btn-analyze').disabled = loading;
+}
+
+document.getElementById('btn-extract').addEventListener('click', extract);
+document.getElementById('btn-analyze').addEventListener('click', analyze);
+document.getElementById('btn-skip').addEventListener('click', analyzeDirectly);
+
+// 上传后更新按钮状态
+const _origUpdateAnalyzeBtn = updateAnalyzeBtn;
+function updateAnalyzeBtn() {
+  const hasImages = images.length > 0;
+  document.getElementById('btn-extract').disabled = !hasImages;
+  document.getElementById('btn-skip').disabled = !hasImages;
+  document.getElementById('btn-skip').style.display = hasImages ? 'flex' : 'flex';
+  document.getElementById('btn-analyze').disabled = true; // 分析按钮由识别流程控制
+  setStep(1);
+}
+</script>
+</body>
+</html>
